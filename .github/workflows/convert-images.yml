@@ -1,0 +1,64 @@
+name: Convert Images
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  convert:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y imagemagick
+
+    - name: Create directories
+      run: |
+        mkdir -p webp webp-originals png jpg
+        
+    - name: Check for WebP files and process
+      run: |
+        if [ "$(ls -A webp/*.webp 2>/dev/null)" ]; then
+          echo "WebP files found, processing..."
+
+          # Rename WebP files
+          count=1
+          for file in webp/*.webp; do
+            timestamp=$(date -r "$file" +"%Y-%m-%d-%H-%M")
+            new_filename=$(printf "%s/%s-%03d.webp" "webp" "$timestamp" "$count")
+            echo "Renaming $file to $new_filename"
+            mv "$file" "$new_filename"
+            count=$((count + 1))
+          done
+
+          # Convert WebP to PNG and JPG
+          for file in webp/*.webp; do
+            base_name=$(basename "$file" .webp)
+            png_file="png/${base_name}.png"
+            jpg_file="jpg/${base_name}.jpg"
+            echo "Converting $file to $png_file"
+            convert "$file" -define png:compression-level=8 "$png_file"
+            echo "Converting $file to $jpg_file"
+            convert "$file" -quality 85 "$jpg_file"
+          done
+
+          # Move WebP files to webp-originals
+          echo "Moving WebP files to webp-originals/"
+          mv webp/*.webp webp-originals/
+
+        else
+          echo "No WebP files found, nothing to do."
+        fi
+
+    - name: Commit and push changes
+      uses: EndBug/add-and-commit@v9
+      with:
+        add: 'webp-originals/* png/* jpg/*'
+        remove: 'webp/*'
+        message: 'Convert WebP images and move originals'
